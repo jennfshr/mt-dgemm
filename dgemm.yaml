@@ -1,0 +1,83 @@
+base:
+    subtitle: 'DGEMM-OMP_{{ompnumthreads}}_{{size}}'
+    summary: DGEMM problem from the APEX benchmark suite
+    maintainer:
+        name: Paul Ferrell
+        email: pferrell@lanl.gov
+    scheduler: slurm
+    variables:
+        size: [ 20000 ]
+        #size: [ 2500, 5000, 10000, 20000, 40000 ] #12665
+        ompnumthreads: 
+            - '{{ sched.min_ppn // 2 }}'
+        lib_path: '/opt/cray/pe/libsci/20.06.1.1/CRAY/9.0/x86_64/lib'
+        build_opts: 
+            - '-DUSE_CBLAS=1 -Ofast -mcpu=native -fopenmp -L{{lib_path}} -lsci_cray_mp'
+
+    permute_on: [ompnumthreads, size]
+    build:
+        source_url: http://portal.nersc.gov/project/m888/apex/mt-dgemm_160114.tgz
+        source_path: mt-dgemm_160114.tgz
+        extra_files: dgemm_omp_fixes.patch
+        modules: [ '{{compilers}}', '{{mpis}}' ]
+        cmds:
+            - "# Patch broken openmp pragmas"
+            - patch -p1 < dgemm_omp_fixes.patch
+            - '${PAV_CC} -o mt-dgemm {{build_opts}} mt-dgemm.c'
+
+    run:
+        timeout: 6000
+        modules: [ '{{compilers}}', '{{mpis}}' ]
+        env:
+            OMP_NUM_THREADS: '{{ompnumthreads}}'
+            OMP_PROC_BIND: 'true'
+            OMP_DISPLAY_ENV: 'true'
+        cmds: 
+            - for node in {{ sched.test_node_list }}; do
+            -   if [[ $node == $SLURMD_NODENAME ]]; then
+            -        continue
+            -   fi    
+            -   srun -w $node -N1 -n1 ./mt-dgemm {{size}} &> ${node}.out &
+            -   sleep 0.5
+            - done
+            - while [[ $(jobs | wc -l) != 0 ]]; do 
+            -   jobs
+            -   sleep 1
+            -   echo -n "."
+            - done
+            - ./mt-dgemm {{size}} &> ${SLURMD_NODENAME}.out
+
+    result_parse:
+#===============================================================
+#Final Sum is:         12665.033333
+# -> Solution check PASSED successfully.
+#Memory for Matrices:  3671.315575 MB
+#Multiply time:        31.769945 seconds
+#FLOPs computed:       121899274911000.000000
+#GFLOP/s rate:         3836.936920 GF/s
+#===============================================================
+        constant:
+            size:
+                const: "{{size}}"
+            omp_num_threads:
+                const: "{{ompnumthreads}}"
+        regex:
+            result: 
+                regex: 'Solution check PASSED successfully'
+                per_file: all
+                files: '*.out'
+                action: store_true
+            memory:
+                regex: '^Memory for Matrices:\s+(.*)\s+MB'
+                per_file: name
+                files: '*.out'
+            gflops:
+                regex: '^GFLOP\/s\s+rate:\s+(.*)\s+GF\/s'
+                per_file: name
+                files: '*.out'
+           
+    result_evaluate:
+        gflops_avg: avg(per_file.*.gflops)
+        gflops_outliers: outliers(per_file.*.gflops, keys(per_file), 2)
+
+
