@@ -1,5 +1,6 @@
-base:
-    subtitle: 'DGEMM-OMP_{{ompnumthreads}}_{{size}}'
+_base:
+    subtitle: '{{compilers.name}}/{{compilers.version}} {{blas.name}}/{{blas.version}} OMP_NUM_THREADS:{{ompnumthreads}} SIZE:{{size}}'
+    
     summary: DGEMM problem from the APEX benchmark suite
     doc: |
           ===================================================================
@@ -67,73 +68,36 @@ base:
         email: pferrell@lanl.gov
     scheduler: slurm
     schedule:
-        nodes: 32
+        nodes: 2
         tasks_per_node: 32
     variables:
-        size: [ 5004 ]
+        #size: [ 5004 ]
         iterations: [ 500 ]
-        #size: [ 2500, 5000, 10000, 20000, 40000 ] #12665
-        mpis:
-            - { name: "cray-mpich", version: "7.7.20", mpicc: "cc", mpicxx: "CC", mpifc: "ftn" }
+        size: [ 2500, 5000, 10000, 20000, 40000 ] #12665
         compilers:
-            - { name: "intel-classic", version: "2022.0.2", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", build_opts: '-DUSE_CBLAS=1 -O3 -qopenmp'}
-            - { name: "intel", version: "2022.0.2", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", build_opts: '-DUSE_CBLAS=1 -O3 -qopenmp'}
-            - { name: "intel-oneapi", version: "2022.0.2", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", build_opts: '-DUSE_CBLAS=1 -O3 -qopenmp'}
-            - { name: "gcc", version: "11.2.0", pe_env: "PrgEnv-gnu", cc: "cc", cxx: "CC", fc: "ftn", build_opts: '-DUSE_CBLAS=1 -O3 -fopenmp'}
-            - { name: "cce", version: "14,0.0", pe_env: "PrgEnv-cray", cc: "cc", cxx: "CC", fc: "ftn", build_opts: '-DUSE_CBLAS=1 -O3 -hopenmp'}
+            - { name: "intel-classic", version: "2022.0.2", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -qopenmp'}
+            - { name: "intel", version: "2022.0.2", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -qopenmp'}
+            - { name: "intel-oneapi", version: "2022.0.2", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -qopenmp'}
+#            - { name: "gcc", version: "11.2.0", pe_env: "PrgEnv-gnu", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -fopenmp'}
+#            - { name: "cce", version: "14.0.0", pe_env: "PrgEnv-cray", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -openmp'}
+        blas:
+            - { name: "intel-mkl", version: "2022.1.0", ldflags: '-L${MKLROOT}/lib/intel64 -Wl,--no-as-needed -lmkl_intel_ilp64 -lmkl_intel_thread -lmkl_core -lm -ldl'}
+#            - { name: "cray-libsci", version: "22.05.1", ldflags: ''}
         ompnumthreads: 
             - '32'
 
-    permute_on: [ompnumthreads, size]
+    permute_on: [ompnumthreads, size, iterations, compilers, blas]
     build:
-        env:
-            CC: '{{compilers.cc}}'
         source_url: http://portal.nersc.gov/project/m888/apex/mt-dgemm_160114.tgz
         source_path: mt-dgemm
-        preamble:
-            - 'test_mod () {'
-            - '  mod=$1'
-            - '  module -t list 2>&1 | grep $mod &>/dev/null || exit 1'
-            - '}'
-            - 'module load friendly-testing'
-            - 'module swap PrgEnv-${PE_ENV,,} {{compilers.pe_env}}'
-            - 'test_mod {{compilers.pe_env}}'
-            - 'comp_name={{compilers.name}}'
-            - 'module unload ${comp_name} || module unload ${comp_name//-*}'
-            - 'module load {{compilers.name}}/{{compilers.version}}'
-            - 'test_mod {{compilers.name}}/{{compilers.version}}'
-            - 'module swap {{mpis.name}}/{{mpis.version}}'
-            - 'test_mod {{mpis.name}}/{{mpis.version}}'
-            - 'module -t list'
-
-        modules:
-            - 'cray-libsci'
         cmds:
             - 'cd src'
             - "# Patch broken openmp pragmas"
-            - patch -p1 < ../dgemm_omp_fixes.patch
-            - '${CC} -o mt-dgemm {{compilers.build_opts}} mt-dgemm.c'
+            - 'patch -p1 < ../dgemm_omp_fixes.patch'
+            - "make CC='{{compilers.cc}}' CFLAGS='{{compilers.cflags}}' LDFLAGS='{{blas.ldflags}}'"
 
     run:
         timeout: 6000
-        preamble:
-            - 'test_mod () {'
-            - '  mod=$1'
-            - '  module -t list 2>&1 | grep $mod &>/dev/null || exit 1'
-            - '}'
-            - 'module load friendly-testing'
-            - 'module swap PrgEnv-${PE_ENV,,} {{compilers.pe_env}}'
-            - 'test_mod {{compilers.pe_env}}'
-            - 'comp_name={{compilers.name}}'
-            - 'module unload ${comp_name} || module unload ${comp_name//-*}'
-            - 'module load {{compilers.name}}/{{compilers.version}}'
-            - 'test_mod {{compilers.name}}/{{compilers.version}}'
-            - 'module swap {{mpis.name}}/{{mpis.version}}'
-            - 'test_mod {{mpis.name}}/{{mpis.version}}'
-            - 'module -t list'
-        modules:
-            - 'cray-libsci'
-
         env:
             OMP_NUM_THREADS: '{{ompnumthreads}}'
             OMP_PROC_BIND: 'close'
@@ -187,4 +151,57 @@ base:
         gflops_avg: avg(per_file.*.gflops)
         gflops_outliers: outliers(per_file.*.gflops, keys(per_file), 2)
 
-
+xc40:
+    inherits_from: _base
+    only_if:
+        "{{sys_os.name}}": ["cle"]
+    schedule:
+        nodes: 2
+        tasks_per_node: 32
+    variables:
+        #size: [ 5004 ]
+        iterations: [ 500 ]
+        size: [ 2500, 5000, 10000, 20000, 40000 ] #12665
+        compilers:
+            - { name: "intel-classic", version: "2022.0.2", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -qopenmp'}
+            - { name: "intel", version: "2022.0.2", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -qopenmp'}
+            - { name: "intel-oneapi", version: "2022.0.2", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -qopenmp'}
+#            - { name: "gcc", version: "11.2.0", pe_env: "PrgEnv-gnu", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -fopenmp'}
+#            - { name: "cce", version: "14.0.0", pe_env: "PrgEnv-cray", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -openmp'}
+        blas:
+            - { name: "intel-mkl", version: "2022.1.0", ldflags: '-L${MKLROOT}/lib/intel64 -Wl,--no-as-needed -lmkl_intel_ilp64 -lmkl_intel_thread -lmkl_core -lm -ldl'}
+#            - { name: "cray-libsci", version: "22.05.1", ldflags: ''}
+        ompnumthreads:
+            - '32'
+    build:
+        preamble:
+            - 'test_mod () {'
+            - '  mod=$1'
+            - '  module -t list 2>&1 | grep $mod &>/dev/null || exit 1'
+            - '}'
+            - 'module load friendly-testing'
+            - 'module swap PrgEnv-${PE_ENV,,} {{compilers.pe_env}}'
+            - 'test_mod {{compilers.pe_env}}'
+            - 'comp_name={{compilers.name}}'
+            - 'module unload ${comp_name} || module unload ${comp_name//-*}'
+            - 'module load {{compilers.name}}/{{compilers.version}}'
+            - 'test_mod {{compilers.name}}/{{compilers.version}}'
+            - 'module -t list'
+        modules:
+            - '{{blas.name}}/{{blas.version}}'
+    run:
+        preamble:
+            - 'test_mod () {'
+            - '  mod=$1'
+            - '  module -t list 2>&1 | grep $mod &>/dev/null || exit 1'
+            - '}'
+            - 'module load friendly-testing'
+            - 'module swap PrgEnv-${PE_ENV,,} {{compilers.pe_env}}'
+            - 'test_mod {{compilers.pe_env}}'
+            - 'comp_name={{compilers.name}}'
+            - 'module unload ${comp_name} || module unload ${comp_name//-*}'
+            - 'module load {{compilers.name}}/{{compilers.version}}'
+            - 'test_mod {{compilers.name}}/{{compilers.version}}'
+            - 'module -t list'
+        modules:
+            - '{{blas.name}}/{{blas.version}}'
