@@ -1,14 +1,77 @@
 base:
     subtitle: 'DGEMM-OMP_{{ompnumthreads}}_{{size}}'
     summary: DGEMM problem from the APEX benchmark suite
+    doc: |
+          ===================================================================
+          ACES DGEMM Benchmark
+          ===================================================================
+          
+          The purpose of the DGEMM benchmark is to provide an evaluation
+          mechanism for running numerically intensive appplications on
+          hardware systems with active thermal throttling and dynamic clock
+          frequencies.
+          
+          The benchmark runs on a single node (i.e. there is no distributed
+          MPI) but is threaded.
+          
+          Source code is contained in the "src" directory.
+          
+          ===================================================================
+          
+          Modifications Permitted:
+          
+          - Vendors are permitted to change the source code in the region
+          marked in the source.
+          - Optimized BLAS/DGEMM routines are permitted (and encouraged) to
+          demonstrated the highest performance.
+          - Vendors may modify the Makefile(s) as required
+          
+          ===================================================================
+          
+          Running the Benchmark:
+          
+          Example:
+          
+          export OMP_NUM_THREADS=32
+          export OMP_PLACES=cores
+          export OMP_PROC_BIND=close
+          
+          ./mt-dgemm 5004 100
+          
+          
+          - This runs the benchmark with a matrix input size of 5004 and
+          100 repetitions.
+          - The vendor is free to select the matrix size but smaller matrices
+          will often produce lower performance results
+          - ACES will perform run the benchmark with a minimum repetition
+          of 500 to ensure consistent processor performance that is unaffected
+          by thermal throttling.
+          
+          ===================================================================
+          
+          Example Output of Interest:
+          
+          Final Sum is:         5004.010000
+          Memory for Matrices:  573.120483 MB
+          Multiply time:        26.925897 seconds
+          FLOPs computed:       25065056016000.000000
+          GFLOP/s rate:         930.890292 GF/s
+          
+          - The GFLOP/s rate is the FOM of interest for this benchmark
+          - The *entire* output should be provided by the Offeror
+          
+          ===================================================================
+          
     maintainer:
         name: Paul Ferrell
         email: pferrell@lanl.gov
     scheduler: slurm
     schedule:
         nodes: 32
+        tasks_per_node: 32
     variables:
-        size: [ 20000 ]
+        size: [ 5004 ]
+        iterations: [ 500 ]
         #size: [ 2500, 5000, 10000, 20000, 40000 ] #12665
         mpis:
             - { name: "cray-mpich", version: "7.7.20", mpicc: "cc", mpicxx: "CC", mpifc: "ftn" }
@@ -19,7 +82,7 @@ base:
             - { name: "gcc", version: "11.2.0", pe_env: "PrgEnv-gnu", cc: "cc", cxx: "CC", fc: "ftn", build_opts: '-DUSE_CBLAS=1 -O3 -fopenmp'}
             - { name: "cce", version: "14,0.0", pe_env: "PrgEnv-cray", cc: "cc", cxx: "CC", fc: "ftn", build_opts: '-DUSE_CBLAS=1 -O3 -hopenmp'}
         ompnumthreads: 
-            - '{{ sched.min_cpus // 2 }}'
+            - '32'
 
     permute_on: [ompnumthreads, size]
     build:
@@ -73,7 +136,8 @@ base:
 
         env:
             OMP_NUM_THREADS: '{{ompnumthreads}}'
-            OMP_PROC_BIND: 'true'
+            OMP_PROC_BIND: 'close'
+            OMP_PLACES: 'cores'
             OMP_DISPLAY_ENV: 'true'
         cmds: 
             - for node in {{ sched.test_node_list }}; do
@@ -88,7 +152,7 @@ base:
             -   sleep 1
             -   echo -n "."
             - done
-            - ./src/mt-dgemm {{size}} &> ${SLURMD_NODENAME}.out
+            - ./src/mt-dgemm {{size}} {{iterations}} &> ${SLURMD_NODENAME}.out
 
     result_parse:
 #===============================================================
