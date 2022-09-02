@@ -68,16 +68,17 @@ _base:
         email: pferrell@lanl.gov
     scheduler: slurm
     schedule:
-        nodes: 2
+        nodes: 10
         tasks_per_node: 32
+        share_allocation: false
     variables:
-        #size: [ 5004 ]
+        size: [ 5004 ]
         iterations: [ 500 ]
-        size: [ 2500, 5000, 10000, 20000, 40000 ] #12665
+        #size: [ 2500, 5000, 10000, 20000, 40000 ] #12665
         compilers:
             - { name: "intel-classic", version: "2022.0.2", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -qopenmp'}
-            - { name: "intel", version: "2022.0.2", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -qopenmp'}
-            - { name: "intel-oneapi", version: "2022.0.2", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -qopenmp'}
+#            - { name: "intel", version: "2022.0.2", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -qopenmp'}
+#            - { name: "intel-oneapi", version: "2022.0.2", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -qopenmp'}
 #            - { name: "gcc", version: "11.2.0", pe_env: "PrgEnv-gnu", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -fopenmp'}
 #            - { name: "cce", version: "14.0.0", pe_env: "PrgEnv-cray", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -openmp'}
         blas:
@@ -104,21 +105,24 @@ _base:
             OMP_PLACES: 'cores'
             OMP_DISPLAY_ENV: 'true'
         cmds: 
-            - for node in {{ sched.test_node_list }}; do
-            -   if [[ $node == $SLURMD_NODENAME ]]; then
-            -        continue
-            -   fi    
-            -   srun -w $node -N1 -n1 ./mt-dgemm {{size}} &> ${node}.out &
-            -   sleep 0.5
-            - done
-            - while [[ $(jobs | wc -l) != 0 ]]; do 
-            -   jobs
-            -   sleep 1
-            -   echo -n "."
-            - done
-            - ./src/mt-dgemm {{size}} {{iterations}} &> ${SLURMD_NODENAME}.out
+            - 'set -x'
+            - 'pushd src &>/dev/null && [ -x mt-dgemm ] || exit -1'
+            - 'for node in $(scontrol show hostname); do'
+            - '  if [[ $node == $SLURMD_NODENAME ]]; then'
+            - '       continue'
+            - '  fi'
+            - '  srun -v -w $node -N1 -n1 ./mt-dgemm {{size}} {{iterations}} &> ../${node}.out &'
+            - '  sleep 0.5'
+            - 'done'
+            - 'while [[ $(jobs | wc -l) != 0 ]]; do'
+            - '  jobs'
+            - '  sleep 1'
+            - '  echo -n "."'
+            - 'done'
+            - './mt-dgemm {{size}} {{iterations}} &> ../${SLURMD_NODENAME}.out'
 
     result_parse:
+#this is not the same format as the dgemm.c we have for xrds, very frustrating
 #===============================================================
 #Final Sum is:         12665.033333
 # -> Solution check PASSED successfully.
@@ -127,6 +131,23 @@ _base:
 #FLOPs computed:       121899274911000.000000
 #GFLOP/s rate:         3836.936920 GF/s
 #===============================================================
+## XRDS DGEMM OUTPUT
+#Matrix size input by command line: 2500
+#Repeat multiply 500 times.
+#Alpha =    1.000000
+#Beta  =    1.000000
+#Allocating Matrices...
+#Allocation complete, populating with values...
+#Performing multiplication...
+#Calculating matrix check...
+#
+#===============================================================
+#Final Sum is:         2500.002000
+#Memory for Matrices:  143.051147 MB
+#Multiply time:        14.487424 seconds
+#FLOPs computed:       15631250000000.000000
+#GFLOP/s rate:         1078.953036 GF/s
+#===============================================================
         constant:
             size:
                 const: "{{size}}"
@@ -134,7 +155,7 @@ _base:
                 const: "{{ompnumthreads}}"
         regex:
             result: 
-                regex: 'Solution check PASSED successfully'
+                regex: 'FLOPs computed:.*'
                 per_file: all
                 files: '*.out'
                 action: store_true
@@ -147,9 +168,9 @@ _base:
                 per_file: name
                 files: '*.out'
            
-    result_evaluate:
-        gflops_avg: avg(per_file.*.gflops)
-        gflops_outliers: outliers(per_file.*.gflops, keys(per_file), 2)
+#    result_evaluate:
+#        gflops_avg: avg(per_file.*.gflops)
+#        gflops_outliers: outliers(per_file.*.gflops, keys(per_file), 2)
 
 xc40:
     inherits_from: _base
