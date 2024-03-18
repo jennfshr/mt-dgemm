@@ -68,10 +68,10 @@ _base:
         email: pferrell@lanl.gov
     scheduler: slurm
     schedule:
-        nodes: 10
+        nodes: 25
         tasks_per_node: 32
         share_allocation: false
-    permute_on: [ompnumthreads, size, iterations, compilers, blas]
+    permute_on: [ompnumthreads, size]
     build:
         source_url: http://portal.nersc.gov/project/m888/apex/mt-dgemm_160114.tgz
         source_path: mt-dgemm
@@ -82,11 +82,11 @@ _base:
             - "make CC='{{compilers.cc}}' CFLAGS='{{compilers.cflags}}' LDFLAGS='{{blas.ldflags}}'"
     run:
         timeout: 6000
-        env:
-            OMP_NUM_THREADS: '{{ompnumthreads}}'
-            OMP_PROC_BIND: 'close'
-            OMP_PLACES: 'cores'
-            OMP_DISPLAY_ENV: 'true'
+    #    env:
+    #        OMP_NUM_THREADS: '{{ompnumthreads}}'
+    #        OMP_PROC_BIND: 'close'
+    #        OMP_PLACES: 'cores'
+    #        OMP_DISPLAY_ENV: 'true'
         cmds: 
             - 'set -x'
             - 'pushd src &>/dev/null && [ -x mt-dgemm ] || exit -1'
@@ -157,13 +157,13 @@ xc40:
         iterations: [ 500 ]
         size: [ 2500, 5000, 10000, 20000, 40000 ] #12665
         compilers:
-            - { name: "intel-classic", version: "2022.0.2", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -qopenmp'}
-            - { name: "intel", version: "2022.0.2", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -qopenmp'}
-            - { name: "intel-oneapi", version: "2022.0.2", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -qopenmp'}
+            - { name: "intel-classic", version: "2023.2.0", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -qopenmp'}
+            - { name: "intel", version: "2023.2.0", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -qopenmp'}
+            - { name: "intel-oneapi", version: "2023.2.0", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -qopenmp'}
 #            - { name: "gcc", version: "11.2.0", pe_env: "PrgEnv-gnu", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -fopenmp'}
 #            - { name: "cce", version: "14.0.0", pe_env: "PrgEnv-cray", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -openmp'}
         blas:
-            - { name: "intel-mkl", version: "2022.1.0", ldflags: '-L${MKLROOT}/lib/intel64 -Wl,--no-as-needed -lmkl_intel_ilp64 -lmkl_intel_thread -lmkl_core -lm -ldl'}
+            - { name: "intel-mkl", version: "2023.2.0", ldflags: '-L${MKLROOT}/lib/intel64 -Wl,--no-as-needed -lmkl_intel_ilp64 -lmkl_intel_thread -lmkl_core -lm -ldl'}
 #CRAYLIBSCI BLAS results in segfaults
 #            - { name: "cray-libsci", version: "22.05.1", ldflags: ''}
         ompnumthreads:
@@ -200,3 +200,82 @@ xc40:
             - 'module -t list'
         modules:
             - '{{blas.name}}/{{blas.version}}'
+ex:
+    inherits_from: _base
+    only_if:
+        "{{sys_os.name}}": ["cos"]
+    schedule:
+        nodes: 2
+        slurm:
+            sbatch_extra:
+                - '-S 2'
+          
+    variables:
+        iterations: [ 500 ]
+        #size: 20000
+        size: [ 20000, 30000, 40000 ] #12665
+        compilers:
+            - { name: "intel-classic", version: "2023.2.0", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -qopenmp'}
+            - { name: "intel", version: "2023.2.0", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -qopenmp'}
+            - { name: "intel-oneapi", version: "2023.2.0", pe_env: "PrgEnv-intel", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -qopenmp'}
+#            - { name: "gcc", version: "11.2.0", pe_env: "PrgEnv-gnu", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -fopenmp'}
+#            - { name: "cce", version: "14.0.0", pe_env: "PrgEnv-cray", cc: "cc", cxx: "CC", fc: "ftn", cflags: '-DUSE_CBLAS=1 -O3 -openmp'}
+        blas:
+            - { name: "intel-mkl", version: "2023.2.0", ldflags: '-L${MKLROOT}/lib/intel64 -Wl,--no-as-needed -lmkl_intel_ilp64 -lmkl_intel_thread -lmkl_core -lm -ldl'}
+#CRAYLIBSCI BLAS results in segfaults
+#            - { name: "cray-libsci", version: "22.05.1", ldflags: ''}
+        ompnumthreads:
+            - '110'
+
+#    permute_on: [ompnumthreads, size]
+
+    build:
+        preamble:
+            - 'test_mod () {'
+            - '  mod=$1'
+            - '  module -t list 2>&1 | grep $mod &>/dev/null || exit 1'
+            - '}'
+            - 'module swap PrgEnv-${PE_ENV,,} {{compilers.pe_env}}'
+            - 'test_mod {{compilers.pe_env}}'
+            - 'comp_name={{compilers.name}}'
+            - 'module unload ${comp_name} || module unload ${comp_name//-*}'
+            - 'module load {{compilers.name}}/{{compilers.version}}'
+            - 'test_mod {{compilers.name}}/{{compilers.version}}'
+            - 'module -t list'
+    run:
+        timeout: 6000
+        env:
+            OPENBLAS_NUM_THREADS: '{{ompnumthreads}}'
+            OMP_NUM_THREADS: '{{ompnumthreads}}'
+            OMP_DISPLAY_AFFINITY: 'true'
+            OMP_DISPLAY_ENV: 'true'
+            #OMP_PROC_BIND: 'close'
+            #OMP_PLACES: 'cores'
+        preamble:
+            - 'test_mod () {'
+            - '  mod=$1'
+            - '  module -t list 2>&1 | grep $mod &>/dev/null || exit 1'
+            - '}'
+            - 'module swap PrgEnv-${PE_ENV,,} {{compilers.pe_env}}'
+            - 'test_mod {{compilers.pe_env}}'
+            - 'comp_name={{compilers.name}}'
+            - 'module unload ${comp_name} || module unload ${comp_name//-*}'
+            - 'module load {{compilers.name}}/{{compilers.version}}'
+            - 'test_mod {{compilers.name}}/{{compilers.version}}'
+            - 'module -t list'
+        cmds:
+            - 'pushd src &>/dev/null && [ -x mt-dgemm ] || exit -1'
+            - 'for node in [~{{sched.test_node_list}} ~]; do'
+            - '  if [[ $node == $SLURMD_NODENAME ]]; then'
+            - '       continue'
+            - '  fi'
+            - '  srun -w $node --tasks-per-node=2 -B2 ./mt-dgemm {{size}} {{iterations}} &> ../${node}.out &'
+            - '  sleep 0.5'
+            - 'done'
+            - 'while [[ $(jobs | wc -l) != 0 ]]; do'
+            - '  jobs'
+            - '  sleep 1'
+            - '  echo -n "."'
+            - 'done'
+            - '  srun -w ${SLURMD_NODENAME} --tasks-per-node=2 -B2 ./mt-dgemm {{size}} {{iterations}} &> ../${node}.out &'
+
