@@ -68,7 +68,7 @@ _base:
         email: pferrell@lanl.gov
     scheduler: slurm
     schedule:
-        nodes: 10
+        nodes: 25
         tasks_per_node: 32
         share_allocation: false
     permute_on: [ompnumthreads, size]
